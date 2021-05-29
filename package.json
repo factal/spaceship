@@ -1,0 +1,28 @@
+{
+  "name": "shooter",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack",
+    "watch": "webpack -w"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/three": "^0.128.0",
+    "ts-loader": "^9.2.2",
+    "typescript": "^4.3.2",
+    "webpack": "^5.37.1",
+    "webpack-cli": "^4.7.0"
+  },
+  "dependencies": {
+    "@enable3d/phaser-extension": "^0.22.0",
+    "@types/matter-js": "^0.14.12",
+    "enable3d": "^0.22.0",
+    "matter-js": "^0.17.1",
+    "phaser": "^3.55.2",
+    "three": "^0.127.0"
+  }
+}
