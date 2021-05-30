@@ -20,9 +20,14 @@
   "dependencies": {
     "@enable3d/phaser-extension": "^0.22.0",
     "@types/matter-js": "^0.14.12",
+    "@types/react": "^17.0.8",
+    "@types/react-dom": "^17.0.5",
     "enable3d": "^0.22.0",
+    "jquery": "^3.6.0",
     "matter-js": "^0.17.1",
     "phaser": "^3.55.2",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
     "three": "^0.127.0"
   }
 }

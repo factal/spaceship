@@ -13,7 +13,7 @@ const calcEulerEomMatrix = (euler: THREE.Euler) => {
   const eulerEomMatrix = new THREE.Matrix3().set(
     1, Math.sin(phi) * Math.tan(theta), Math.cos(phi) * Math.tan(theta),
     0, Math.cos(phi), -Math.sin(phi),
-    0, Math.sin(phi) / Math.cos(theta), 1 )
+    0, Math.sin(phi) / Math.cos(theta), Math.cos(phi) )
 
   return eulerEomMatrix.transpose()
 }
@@ -26,7 +26,7 @@ export default class Player extends Agent {
   isMomentumStablizerOn: boolean
   attitudeControlFactor: THREE.Vector3
 
-  //throttle: number
+  throttle: number
   
   localRotationVelocity: THREE.Vector3
 
@@ -39,7 +39,7 @@ export default class Player extends Agent {
     this.isAttitudeControlOn = false
     this.isMomentumStablizerOn = true
 
-    //this.throttle = 0
+    this.throttle = 0
     this.localRotationVelocity = new THREE.Vector3()
 
     this.attitudeControlFactor = new THREE.Vector3()
@@ -49,6 +49,7 @@ export default class Player extends Agent {
 
 
   generateForce(property: string, direction: THREE.Vector3, angular = false) {
+    this.maneuverThrottles[property] = Math.min(this.maneuverThrottles[property], 1.0)
     if (angular) {
       // calc torque
       const force = direction.multiplyScalar(this.maneuverThrottles[property] * this.maneuverPerformances[property])
@@ -74,7 +75,11 @@ export default class Player extends Agent {
         if (event.key == keybinds.maneuvers[move]) {
           event.preventDefault()
           this.maneuverInAction[move] = true
-          this.maneuverThrottles[move] = 1.0
+          if (keybinds.maneuvers[move] != 'r' && keybinds.maneuvers[move] != 'f') {
+            console.log(keybinds.maneuvers[move])
+            this.maneuverThrottles[move] = 1.0
+          }
+          
         }
       })
 
@@ -82,6 +87,8 @@ export default class Player extends Agent {
       if (event.key == 'z') this.isAttitudeStablizerOn ? this.isAttitudeStablizerOn = false : this.isAttitudeStablizerOn = true
       if (event.key == 'x') this.isAttitudeControlOn ? this.isAttitudeControlOn = false : this.isAttitudeControlOn = true
       if (event.key == 'c') this.isMomentumStablizerOn ? this.isMomentumStablizerOn = false : this.isMomentumStablizerOn = true
+
+      if (event.key == 't') this.throttle = 0
     })
 
     // when keyup
@@ -91,10 +98,26 @@ export default class Player extends Agent {
         if (event.key == keybinds.maneuvers[move]) {
           event.preventDefault()
           this.maneuverInAction[move] = false
-          this.maneuverThrottles[move] = 0
+          if (event.key != keybinds.maneuvers.acceleration && event.key != keybinds.maneuvers.deceleration) {
+            this.maneuverThrottles[move] = 0
+          }
         }
       })
     })
+  }
+
+  updateThrottle() {
+    if (this.maneuverInAction.acceleration && this.maneuverThrottles.acceleration < 1.0) this.throttle += 0.01
+    if (this.maneuverInAction.deceleration && this.maneuverThrottles.acceleration > -1.0) this.throttle -= 0.01
+
+    if (this.throttle >= 0) {
+      this.maneuverThrottles.acceleration = Math.abs(this.throttle) // abs 不要だけど一応
+      this.maneuverThrottles.deceleration = 0
+    }
+    if (this.throttle <= 0) {
+      this.maneuverThrottles.acceleration = 0 // ここで直接スロットルをいじってるので注意！！！！
+      this.maneuverThrottles.deceleration = Math.abs(this.throttle)
+    }
   }
   
 

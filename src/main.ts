@@ -5,13 +5,13 @@ import 'enable3d/dist/'
 import 'three/examples/jsm/loaders/GLTFLoader'
 import '@enable3d/phaser-extension'
 import { Project, Scene3D, PhysicsLoader, FLAT, ExtendedObject3D } from 'enable3d'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 
 import Player from './modules/player'
 import { createCubeTexturePathStrings } from './modules/utility'
 import './modules/config'
 import * as config from './modules/config'
-import { Quaternion } from 'three'
+import Laser from './modules/laser'
+import Fire from './modules/fire'
 
 
 
@@ -38,7 +38,7 @@ class MainScene extends Scene3D {
 
 
 	async init() {
-    // debug mode on
+    // debug view on
     this.physics.debug?.enable()
 
 		// init
@@ -56,7 +56,29 @@ class MainScene extends Scene3D {
 
 
 	async create() {
-		const { orbitControls } = await this.warpSpeed('light', '-ground', 'grid','light','-sky', 'orbitControls')
+		const { orbitControls } = await this.warpSpeed('light', '-ground', 'grid','-light','-sky', 'orbitControls')
+
+		const hemisphereLight = new THREE.HemisphereLight(0xaaaaaa,0x000000, .5)
+		const shadowLight = new THREE.DirectionalLight(0xffffff, .9)
+		shadowLight.position.set(150, 350, 350);
+	
+		// Allow shadow casting 
+		shadowLight.castShadow = true;
+
+		// define the visible area of the projected shadow
+		shadowLight.shadow.camera.left = -400
+		shadowLight.shadow.camera.right = 400
+		shadowLight.shadow.camera.top = 400
+		shadowLight.shadow.camera.bottom = -400
+		shadowLight.shadow.camera.near = 1
+		shadowLight.shadow.camera.far = 1000
+
+		shadowLight.shadow.mapSize.width = 2048
+		shadowLight.shadow.mapSize.height = 2048
+
+		this.scene.add(hemisphereLight)
+		this.scene.add(shadowLight)
+
 
 		this.load.gltf('/assets/boat.glb').then((gltf) => {
 			const model = gltf.scene.children[0]
@@ -77,11 +99,25 @@ class MainScene extends Scene3D {
 			this.player.body = model.body
 		})
 
+		const laser = new Laser(this)
+		laser.name = 'laser'
+
+		this.player.add(laser)
+		laser.position.set(0, 0, 0)
+
     // add player
     this.player.add(this.camera)
     this.scene.add(this.player)
     this.physics.add.existing(this.player)
 		
+		
+		const fire = new Fire(new THREE.TextureLoader().load('/assets/textures/fire.png'), new THREE.Color(0x4dedff))
+		fire.name = 'fire'
+		this.player.add(fire)
+
+		fire.scale.set(0.5, 2, 0.5)
+		fire.rotation.set(0, 0, Math.PI / 2)
+		fire.position.set(-1.8, 0.2, 0)
 
     // create skybox
     const skyboxTextureLoader = new THREE.CubeTextureLoader()
@@ -133,8 +169,6 @@ class MainScene extends Scene3D {
 				cloud?.scale.set(s, s, s)
 
 				this.add.existing(cloud)
-
-
 			}
 		}
 
@@ -157,12 +191,19 @@ class MainScene extends Scene3D {
     // add key input listener
 		this.player.addControlInputListener()
 
+		window.addEventListener('keydown', (event) => {
+			if (event.key == 'v'){
+				
+			}
+		})
+
 		// hyper unchi implementation
 		const sprite3d = new FLAT.TextSprite(new FLAT.TextTexture('dummydummydummydummy\ndummydummydummydummy\ndummydummydummydummy\ndummydummydummydummy\ndummydummydummydummy\ndummydummydummydummy\ndummydummydummydummy\ndummydummydummydummy\ndummydummydummydummy'))
 		sprite3d.name = 'infoText'
 		this.player.add(sprite3d)
 		sprite3d.setPosition(2, 2)
 		sprite3d.setScale(0.005)
+		sprite3d.visible = false // for dev
 	}
 
 
@@ -182,21 +223,27 @@ class MainScene extends Scene3D {
 
 
   update() {
-		// なぜか ammo.threeObject を書き換えても PhysicsBody と ExtendedObject3D のトランスフォームの同期がなくなるので
-		this.player.position.set(this.player.body.position.x, this.player.body.position.y, this.player.body.position.z)
-		const tmpQuaternion = new THREE.Quaternion(this.player.body.quaternion.x, this.player.body.quaternion.y, this.player.body.quaternion.z, this.player.body.quaternion.w)
-		this.player.setRotationFromQuaternion(tmpQuaternion)
+		// @ts-ignore
+		this.player.getObjectByName('fire').update(this.clock.elapsedTime * 10, 5 - this.player.maneuverThrottles.acceleration * 5)
 
+		// @ts-ignore
+		this.player.getObjectByName('laser').fire()
+
+		
 		const pos = this.player.localToWorld(new THREE.Vector3(0, 0, 0))
 		this.camera.lookAt(pos)
 
 		// for dev
 		// display current state
 		const style = { fontFamily: 'Trebuchet MS', fillStyle: '#786c8c' }
+		
 		const texture = new FLAT.TextTexture(
+			//@ts-ignore
+			'distance: ' + String(this.player.getObjectByName('laser').distance.length()) + '\n' +
 			'AttitudeStablizer: ' + String(this.player.isAttitudeStablizerOn) + '\n' +
-			'AttitudeControl: ' + String(this.player.isAttitudeControlOn) + '\n' +
-			'MomentumStablizer: ' + String(this.player.isMomentumStablizerOn) + '\n' +
+			
+			'acc: ' + String(this.player.maneuverThrottles.acceleration) + '\n' +
+			'dec: ' + String(this.player.maneuverThrottles.deceleration) + '\n' +
 			'rollRight: ' + String(this.player.maneuverInAction.rollRight) + ' ' + String(this.player.maneuverThrottles.rollRight.toFixed(8)) + '\n' +
 			'rollLeft: ' + String(this.player.maneuverInAction.rollLeft) + ' ' + String(this.player.maneuverThrottles.rollLeft.toFixed(8)) + '\n' +
 			'yawRight: ' + String(this.player.maneuverInAction.yawRight) + ' ' + String(this.player.maneuverThrottles.yawRight.toFixed(8)) + '\n' +
@@ -209,10 +256,22 @@ class MainScene extends Scene3D {
 		// @ts-ignore
 		sprite3d.setTexture(texture)
 
+		
+
 		// update player
+		this.player.updateThrottle()
     this.player.updateAttitudeControl()
 		this.player.updateMomentumStablizer()
 		this.player.updateForce()
+
+
+		// @ts-ignore
+		this.player.getObjectByName('fire')?.position.set(-1.5, 0.2, 0)
+
+		// なぜか ammo.threeObject を書き換えても PhysicsBody と ExtendedObject3D のトランスフォームの同期がなくなるので
+		this.player.position.set(this.player.body.position.x, this.player.body.position.y, this.player.body.position.z)
+		const tmpQuaternion = new THREE.Quaternion(this.player.body.quaternion.x, this.player.body.quaternion.y, this.player.body.quaternion.z, this.player.body.quaternion.w)
+		this.player.setRotationFromQuaternion(tmpQuaternion)
 	}
 }
 
@@ -228,5 +287,5 @@ const sceneConfig = {
 	scenes: [MainScene], 
 	antialias: true,
 	
-	}
+}
 PhysicsLoader('/src/ammo', () => new Project(sceneConfig))

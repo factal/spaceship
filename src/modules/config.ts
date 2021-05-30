@@ -35,3 +35,7 @@ export const reactionControlConfig = {
     0, 0, 1 ),
   momentumResponse: 0.5, // high -> dull correction response
 }
+
+export const defaultLaserCookedTexture = '/assets/textures/laserParticle.png'
+
+export const defaultHitDetectionBufferLength = 2
