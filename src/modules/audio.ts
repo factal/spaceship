@@ -1,50 +1,78 @@
-// not finished
-// disabled!
-
+import { Scene3D } from "enable3d"
 import * as THREE from "three"
 
-export class SpatialAudio {
-  listener: THREE.AudioListener
-  sounds: {[key: string]: THREE.PositionalAudio}
-  audioLoader: THREE.AudioLoader
-  aliases: {[key: string]: string}
 
-  constructor() {
+
+export class AudioHandler {
+  scene: Scene3D
+  listener: THREE.AudioListener
+  audioLoader: THREE.AudioLoader
+
+  aliases: {[key: string]: string}
+  buffers: {[key: string]: AudioBuffer}
+  sounds: Array<ExtendedAudio | ExtendedPositionalAudio>
+
+  constructor(scene: Scene3D) {
+    this.scene = scene
     this.listener = new THREE.AudioListener()
-    this.sounds = {}
+
+    
     this.audioLoader = new THREE.AudioLoader()
 
+    // {alias: AudioBuffer}
+    this.buffers = {}
+    this.sounds = []
+    // {alias: file url}
     this.aliases = {}
-
-    // add helper
-    // const helper = new PositionalAudioHelper(this.sound)
-    // this.sound.add(helper)
   }
 
-  loadSound(path: string, alias: string, refDistance: number=10) {
-    this.aliases[alias] = path
+  attachCamera() {
+    this.scene.camera.add(this.listener)
+  }
 
-    const soundInstance = new THREE.PositionalAudio(this.listener)
-
-    this.sounds[alias] = soundInstance
-
-    this.audioLoader.load(path, (buffer) => {
-      this.sounds[alias].setBuffer(buffer)
-      this.sounds[alias].setRefDistance(refDistance)
+  async loadSound(path: string, alias: string, overwrite: boolean=false): Promise<AudioBuffer> {
+    return new Promise((resolve, reject) => {
+      this.audioLoader.load(path, (buffer) => {
+        this.aliases[alias] = path
+        this.buffers[alias] = buffer
+        resolve(buffer)
+      })
     })
   }
+  
 
-  getPositionalAudio(alias: string) {
-    return this.sounds[alias]
+
+
+  createPositionalAudio(alias: string, refDistance: number=5): ExtendedPositionalAudio | null {
+    if (this.buffers!) {
+      const sound = new ExtendedPositionalAudio(this.listener)
+
+    sound.setBuffer(this.buffers[alias])
+    sound.setRefDistance(refDistance)
+
+    this.sounds.push(sound)
+
+    return sound
+    } else {
+      return null
+    }
+    
+  }
+}
+
+export class ExtendedAudio extends THREE.Audio {
+  constructor(listener: THREE.AudioListener) {
+    super(listener)
+  }
+}
+
+export class ExtendedPositionalAudio extends THREE.PositionalAudio {
+  constructor(listener: THREE.AudioListener) {
+    super(listener)
   }
 
-  play(alias: string) {
-    this.sounds[alias].play()
+  playOneshot() {
+    if (this.isPlaying) this.stop()
+    this.play()
   }
-
-  stop(alias: string) {
-    this.sounds[alias].stop()
-  }
-
-
 }

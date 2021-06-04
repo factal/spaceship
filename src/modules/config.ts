@@ -4,6 +4,7 @@ export const skyboxImage = 'corona'
 
 interface keybindsInterface {
   maneuvers: {[key: string]: string}
+  weapons: {[key: string]: string}
 }
 
 export const keybinds: keybindsInterface = {
@@ -20,7 +21,10 @@ export const keybinds: keybindsInterface = {
     thrustRight: 'l',
     thrustUp: 'i',
     thrustDown: 'k',
-  }
+  },
+  weapons: {
+    main: 'v'
+  },
 }
 
 export const reactionControlConfig = {
@@ -39,3 +43,24 @@ export const reactionControlConfig = {
 export const defaultLaserCookedTexture = '/assets/textures/laserParticle.png'
 
 export const defaultHitDetectionBufferLength = 2
+
+export const maneuvers: string[] = ['acceleration', 'deceleration', 'rollLeft', 'rollRight', 'yawLeft', 'yawRight', 'pitchUp', 'pitchDown', 'thrustLeft',  'thrustRight', 'thrustUp', 'thrustDown']
+
+export const defaultDestroyerConfig = {
+  aliveDuration: 0.5, // sec
+  physicalBodyCondig: {
+    x: 0,
+    y: 0,
+    z: 0,
+    radius: 1,
+    mass: 20
+  }
+}
+
+export interface weaponConfigInterface {
+  part: string
+}
+
+export const defaultWeaponConfig = {
+  part: 'main'
+}

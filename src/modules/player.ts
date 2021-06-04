@@ -1,92 +1,61 @@
 import * as THREE from "three"
 import Agent from "./agent"
 import './config'
-import { keybinds, reactionControlConfig } from "./config"
+import { keybinds, maneuvers, reactionControlConfig } from "./config"
 
-
-
-const calcEulerEomMatrix = (euler: THREE.Euler) => {
-  const phi = euler.x
-  const theta = euler.y
-  const psy = euler.z
-
-  const eulerEomMatrix = new THREE.Matrix3().set(
-    1, Math.sin(phi) * Math.tan(theta), Math.cos(phi) * Math.tan(theta),
-    0, Math.cos(phi), -Math.sin(phi),
-    0, Math.sin(phi) / Math.cos(theta), Math.cos(phi) )
-
-  return eulerEomMatrix.transpose()
-}
-
-
-
-export default class Player extends Agent {
+interface stateInterface {
+  type: string // 'agent': default, 'player': player, 'AI': AI
+  hull: number
+  shield: number
+  team: string
+  isMomentumStablizerOn: boolean
   isAttitudeStablizerOn: boolean
   isAttitudeControlOn: boolean
-  isMomentumStablizerOn: boolean
-  attitudeControlFactor: THREE.Vector3
+  isControlledByPlayer: boolean
+}
 
+const defaultState: stateInterface = {
+  type: 'agent',
+  hull: 100,
+  shield: 100,
+  team: 'player',
+  isMomentumStablizerOn: true,
+  isAttitudeStablizerOn: true,
+  isAttitudeControlOn: false,
+  isControlledByPlayer: false
+}
+
+export default class Player extends Agent {
   throttle: number
   
-  localRotationVelocity: THREE.Vector3
-
-
-  
   constructor() {
-    super()
-    
-    this.isAttitudeStablizerOn = true
-    this.isAttitudeControlOn = false
-    this.isMomentumStablizerOn = true
+    super(defaultState)
 
     this.throttle = 0
-    this.localRotationVelocity = new THREE.Vector3()
-
-    this.attitudeControlFactor = new THREE.Vector3()
-    
   }
 
-
-
-  generateForce(property: string, direction: THREE.Vector3, angular = false) {
-    this.maneuverThrottles[property] = Math.min(this.maneuverThrottles[property], 1.0)
-    if (angular) {
-      // calc torque
-      const force = direction.multiplyScalar(this.maneuverThrottles[property] * this.maneuverPerformances[property])
-
-      this.body.applyLocalTorque(force.x, force.y, force.z)
-    } else {
-      // calc force
-      const localForce = direction.multiplyScalar(this.maneuverThrottles[property] * this.maneuverPerformances[property])
-      const worldForce = this.localToWorld(localForce)
-      const force = worldForce.sub(this.position)
-
-      this.body.applyForce(force.x, force.y, force.z)
-    }
-  }
-
-
-
-  addControlInputListener() {
+  addInputListener() {
     // when keydown
     window.addEventListener('keydown', (event) => {
       // maneuvers
-      this.maneuvers.forEach((move) => {
+      maneuvers.forEach((move) => {
         if (event.key == keybinds.maneuvers[move]) {
           event.preventDefault()
-          this.maneuverInAction[move] = true
-          if (keybinds.maneuvers[move] != 'r' && keybinds.maneuvers[move] != 'f') {
-            console.log(keybinds.maneuvers[move])
-            this.maneuverThrottles[move] = 1.0
-          }
-          
+
+          if (keybinds.maneuvers[move] != keybinds.maneuvers.acceleration && keybinds.maneuvers[move] != keybinds.maneuvers.deceleration) {
+            this.maneuverControlledByPlayer[move] = true
+            console.log('input: ', move)
+            this.maneuverControlledByPlayerThrottles[move] = 1.0
+          } 
+          if (keybinds.maneuvers[move] == keybinds.maneuvers.acceleration) this.throttleUp = true
+          if (keybinds.maneuvers[move] == keybinds.maneuvers.deceleration) this.throttleDown = true
         }
       })
 
       // toggle flight assist
-      if (event.key == 'z') this.isAttitudeStablizerOn ? this.isAttitudeStablizerOn = false : this.isAttitudeStablizerOn = true
-      if (event.key == 'x') this.isAttitudeControlOn ? this.isAttitudeControlOn = false : this.isAttitudeControlOn = true
-      if (event.key == 'c') this.isMomentumStablizerOn ? this.isMomentumStablizerOn = false : this.isMomentumStablizerOn = true
+      if (event.key == 'z') this.state.isAttitudeStablizerOn ? this.state.isAttitudeStablizerOn = false : this.state.isAttitudeStablizerOn = true
+      if (event.key == 'x') this.state.isAttitudeControlOn ? this.state.isAttitudeControlOn = false : this.state.isAttitudeControlOn = true
+      if (event.key == 'c') this.state.isMomentumStablizerOn ? this.state.isMomentumStablizerOn = false : this.state.isMomentumStablizerOn = true
 
       if (event.key == 't') this.throttle = 0
     })
@@ -94,115 +63,41 @@ export default class Player extends Agent {
     // when keyup
     window.addEventListener('keyup', (event) => {
       // maneuvers
-      this.maneuvers.forEach((move) => {
+      maneuvers.forEach((move) => {
         if (event.key == keybinds.maneuvers[move]) {
           event.preventDefault()
-          this.maneuverInAction[move] = false
-          if (event.key != keybinds.maneuvers.acceleration && event.key != keybinds.maneuvers.deceleration) {
-            this.maneuverThrottles[move] = 0
+
+          if (keybinds.maneuvers[move] != keybinds.maneuvers.acceleration && keybinds.maneuvers[move] != keybinds.maneuvers.deceleration) {
+            this.maneuverControlledByPlayer[move] = false
+            this.maneuverControlledByPlayerThrottles[move] = 0
           }
+
+          if (keybinds.maneuvers[move] == keybinds.maneuvers.acceleration) this.throttleUp = false
+          if (keybinds.maneuvers[move] == keybinds.maneuvers.deceleration) this.throttleDown = false
         }
       })
     })
   }
 
   updateThrottle() {
-    if (this.maneuverInAction.acceleration && this.maneuverThrottles.acceleration < 1.0) this.throttle += 0.01
-    if (this.maneuverInAction.deceleration && this.maneuverThrottles.acceleration > -1.0) this.throttle -= 0.01
+    // if (this.throttle == 0) {
+    //   this.maneuverControlledByPlayer.acceleration = false
+    //   this.maneuverControlledByPlayer.deceleration = false
+    // } else {
+      this.maneuverControlledByPlayer.acceleration = true
+      this.maneuverControlledByPlayer.deceleration = true
+    // }
+
+    if (this.throttleUp) this.throttle += 0.01
+    if (this.throttleDown) this.throttle -= 0.01
 
     if (this.throttle >= 0) {
-      this.maneuverThrottles.acceleration = Math.abs(this.throttle) // abs 不要だけど一応
-      this.maneuverThrottles.deceleration = 0
+      this.maneuverControlledByPlayerThrottles.acceleration = Math.abs(this.throttle) // abs 不要だけど一応
+      this.maneuverControlledByPlayerThrottles.deceleration = 0
     }
     if (this.throttle <= 0) {
-      this.maneuverThrottles.acceleration = 0 // ここで直接スロットルをいじってるので注意！！！！
-      this.maneuverThrottles.deceleration = Math.abs(this.throttle)
+      this.maneuverControlledByPlayerThrottles.acceleration = 0 // ここで直接スロットルをいじってるので注意！！！！
+      this.maneuverControlledByPlayerThrottles.deceleration = Math.abs(this.throttle)
     }
-  }
-  
-
-
-  _calcThrottle(thrusterControl: THREE.Vector3, x: number, y: number, z: number) {
-    return (Math.abs(thrusterControl.x) / reactionControlConfig.rotationResponse) * x + (Math.abs(thrusterControl.y) / reactionControlConfig.rotationResponse) * y + (Math.abs(thrusterControl.z) / reactionControlConfig.rotationResponse) * z 
-  }
-
-
-  
-  /**
-   * Attitude Control System
-   * see DOI: 10.1080/00207721.2013.815824
-   */
-  updateAttitudeControl() {
-    // localRotationVelocityVector
-    // this.localRotationVelocity
-
-    const rotationMatrix = new THREE.Matrix4().makeRotationFromEuler(this.rotation)
-    rotationMatrix.transpose()
-
-    const localRotationVelocityVector = new THREE.Vector3(this.body.angularVelocity.x, this.body.angularVelocity.y, this.body.angularVelocity.z)
-    localRotationVelocityVector.applyMatrix4(rotationMatrix)
-
-    this.localRotationVelocity.copy(localRotationVelocityVector)
-
-    const rotationVelocityFactor = new THREE.Vector3().copy(localRotationVelocityVector).applyMatrix3(reactionControlConfig.rotationVelocityFeedbackGain).multiplyScalar(-1)
-    const eulerFactor = new THREE.Vector3(this.rotation.x, this.rotation.y, this.rotation.z).applyMatrix3(reactionControlConfig.eulerFeedbackGain).applyMatrix3(calcEulerEomMatrix(this.rotation)).multiplyScalar(-1)
-
-    const thrusterControl = new THREE.Vector3().add(rotationVelocityFactor)
-    if (this.isAttitudeControlOn) thrusterControl.add(eulerFactor)
-
-    // apply Throttle
-    if (this.isAttitudeStablizerOn || this.isAttitudeControlOn) {
-      if (!this.maneuverInAction.rollRight && !this.maneuverInAction.rollLeft && thrusterControl.x > 0) {
-        this.maneuverThrottles.rollRight = this._calcThrottle(thrusterControl, 1, 0, 0)
-        this.maneuverThrottles.rollLeft = 0
-      }
-      if (!this.maneuverInAction.rollRight && !this.maneuverInAction.rollLeft && thrusterControl.x < 0) {
-        this.maneuverThrottles.rollLeft = this._calcThrottle(thrusterControl, 1, 0, 0)
-        this.maneuverThrottles.rollRight = 0
-      }
-      if (!this.maneuverInAction.yawRight && !this.maneuverInAction.yawLeft && thrusterControl.y < 0) {
-        this.maneuverThrottles.yawRight = this._calcThrottle(thrusterControl, 0, 1, 0)
-        this.maneuverThrottles.yawLeft = 0
-      }
-      if (!this.maneuverInAction.yawRight && !this.maneuverInAction.yawLeft && thrusterControl.y > 0) {
-        this.maneuverThrottles.yawLeft = this._calcThrottle(thrusterControl, 0, 1, 0)
-        this.maneuverThrottles.yawRight = 0
-      }
-      if (!this.maneuverInAction.pitchUp && !this.maneuverInAction.pitchDown && thrusterControl.z > 0) {
-        this.maneuverThrottles.pitchUp = this._calcThrottle(thrusterControl, 0, 0, 1)
-        this.maneuverThrottles.pitchDown = 0
-      }
-      if (!this.maneuverInAction.pitchUp && !this.maneuverInAction.pitchDown && thrusterControl.z < 0) {
-        this.maneuverThrottles.pitchDown =this._calcThrottle(thrusterControl, 0, 0, 1)
-        this.maneuverThrottles.pitchUp = 0
-      }
-    }
-  }
-
-
-
-  updateMomentumStablizer(): void {
-    // need revision
-    if (this.isMomentumStablizerOn) {
-      const simpleLinearFactor = -0.05
-      this.body.applyForce(simpleLinearFactor * this.body.velocity.x, simpleLinearFactor * this.body.velocity.y, simpleLinearFactor * this.body.velocity.z)
-    }
-  }
-
-  
-
-  updateForce(): void {
-    this.generateForce('acceleration', new THREE.Vector3(1, 0, 0), false)
-    this.generateForce('deceleration', new THREE.Vector3(-1, 0, 0), false)
-    this.generateForce('rollRight', new THREE.Vector3(1, 0, 0), true)
-    this.generateForce('rollLeft', new THREE.Vector3(-1, 0, 0), true)
-    this.generateForce('yawRight', new THREE.Vector3(0, -1, 0), true)
-    this.generateForce('yawLeft', new THREE.Vector3(0, 1, 0), true)
-    this.generateForce('pitchUp', new THREE.Vector3(0, 0, 1), true)
-    this.generateForce('pitchDown', new THREE.Vector3(0, 0, -1), true)
-    this.generateForce('thrustRight', new THREE.Vector3(0, 0, 1), false)
-    this.generateForce('thrustLeft', new THREE.Vector3(0, 0, -1), false)
-    this.generateForce('thrustUp', new THREE.Vector3(0, 1, 0), false)
-    this.generateForce('thrustDown', new THREE.Vector3(0, -1, 0), false)
   }
 }
