@@ -12,16 +12,19 @@ import './modules/config'
 import * as config from './modules/config'
 import Laser from './modules/laser'
 import Agent from './modules/agent'
-import AI from './modules/ai'
+import AI from './modules/control'
 import { ExtendedScene3D } from './modules/scene'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass'
+import Particles from './modules/particle'
+
+const vecdisplay = <HTMLInputElement>document.getElementById('vec')
+
 
 // main logic
 class MainScene extends ExtendedScene3D {
 	agents: Agent[]
 	player: Player
 	enemy: Agent
-	ai: AI
 
 
 
@@ -31,7 +34,6 @@ class MainScene extends ExtendedScene3D {
 
     this.player = new Player()
 		this.enemy = new Agent()
-		this.ai = new AI(this.enemy)
 
 		this.agents.push(this.player)
 		this.agents.push(this.enemy)
@@ -57,7 +59,7 @@ class MainScene extends ExtendedScene3D {
 		const renderScene = new RenderPass( this.scene, this.camera)
 		const bloomPass = new UnrealBloomPass( new THREE.Vector2( window.innerWidth, window.innerHeight ), 3, 1, 0.8 )
 		this.composer.addPass(renderScene)
-		this.composer.addPass(bloomPass)
+		//this.composer.addPass(bloomPass)
 		
 	}
 
@@ -110,11 +112,12 @@ class MainScene extends ExtendedScene3D {
 		// this.scene.add(shadowLight)
 
 
-		this.load.gltf('/assets/vulture_lowpoly.gltf').then((gltf) => {
+		this.load.gltf('/assets/boat.glb').then((gltf) => {
 			const model = gltf.scene.children[0]
 			
 			model.position.set(0, 0, 0)
-			model.rotation.set(Math.PI/2, -Math.PI/2, 0 )
+			model.rotation.set(0, 0, 0)
+			model.scale.set(2, 2, 2)
 
 			this.player.add(model)
 
@@ -132,8 +135,9 @@ class MainScene extends ExtendedScene3D {
 			//this.player.body = model.body
 		})
 
-		
-
+		const box = this.add.box({depth: 2, width:2, height: 2})
+		box.visible = false
+		this.player.add(box)
 
 
 
@@ -143,11 +147,13 @@ class MainScene extends ExtendedScene3D {
 
 		// audio
 
-
-
 		
-		this.enemy.rotation.set(0, Math.PI, 0)
-		this.enemy.position.set(100, 0, 100)
+		
+		this.enemy.rotation.set(0, 0, 0)
+		this.enemy.position.set(-10, 0, -10)
+		this.enemy.state.isAttitudeControlOn = true
+		this.enemy.control.target = this.player
+
 		this.scene.add(this.enemy)
 		this.physics.add.existing(this.enemy)
 
@@ -162,15 +168,32 @@ class MainScene extends ExtendedScene3D {
     // add player, enemy, ai
     this.player.add(this.camera)
     this.scene.add(this.player)
+		this.player.position.set(0, 0, 0)
     this.physics.add.existing(this.player, { mass: 5})
-		this.player.body.setBounciness(0.5)
+		this.player.position.set(0, 0, 0)
+		this.player.body.setBounciness(0.2)
 
 		
 
+		const createEnemy = () => {
+			const box = this.add.box({depth: 0.3, width: 0.3, height: 0.3})
+			const enemy = new Agent()
+			enemy.add(box)
+			enemy.rotation.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2)
+			enemy.position.set((Math.random() - 1/2) * 100, (Math.random() - 1/2) * 100, (Math.random() - 1/2) * 100)
+			
+			
+			enemy.control.target = this.player
+			this.scene.add(enemy)
+			this.physics.add.existing(enemy)
+			enemy.applyThrottleControl(new THREE.Vector3(1, 0, 0))
+			this.addUpdateQueue(enemy.updateMethod)
+		}
 
-		this.ai.updateObserver(this.agents)
-	  this.ai.seekTarget()
-		this.enemy.state.isAttitudeControlOn = true
+		// for (let i =0; i <= 20; i++) {
+		// 	createEnemy()
+		// }
+		
 
 
 		
@@ -245,11 +268,11 @@ class MainScene extends ExtendedScene3D {
 
 
 		const createRandomBox = () => {
-			const size = 0.1 + Math.random() * 1000
+			const size = 0.1 + Math.random() * 10
 			const config = {
-				x: (Math.random() - 1/2) * 100000,
-				y: (Math.random() - 1/2) * 100000,
-				z: (Math.random() - 1/2) * 100000,
+				x: (Math.random() - 1/2) * 1000,
+				y: (Math.random() - 1/2) * 1000,
+				z: (Math.random() - 1/2) * 1000,
 				depth: size,
 				width: size,
 				height: size,
@@ -269,34 +292,16 @@ class MainScene extends ExtendedScene3D {
 			box.receiveShadow = true
 		}
 
-		for (let i=0; i <= 5000; i++) {
+		for (let i=0; i <= 200; i++) {
 			createRandomBox()
 		}
 
-		const cubeRenderTarget2 = new THREE.WebGLCubeRenderTarget( 256, {
-			format: THREE.RGBFormat,
-			generateMipmaps: true,
-			minFilter: THREE.LinearMipmapLinearFilter,
-			encoding: THREE.sRGBEncoding
-		} );
 
-		const material = new THREE.MeshBasicMaterial( {
-			envMap: cubeRenderTarget2.texture,
-			combine: THREE.MultiplyOperation,
-			reflectivity: 1
-		} );
-
-		//const box = this.add.box({}, {basic: {envMap:cubeRenderTarget2.texture, combine: THREE.MultiplyOperation, reflectivity: 1 }})
-
-
-
-
-		
-
-		//const box = this.add.box()
-		//box.position.set(0, 2, 0)
-		//this.physics.add.existing(box, {breakable: true, fractureImpulse: 1, collisionFlags: 3})
-		
+		const particle = new Particles(this)
+		particle.loadTexture()
+		particle.init()
+		particle.create()
+		this.scene.add(particle)
 
 
 
@@ -312,9 +317,8 @@ class MainScene extends ExtendedScene3D {
 		window.addEventListener('keydown', (event) => {
 			if (event.key == 'h') {
 				//	console.log(this.player.getWorldPosition(0,0,0))
-				console.log(this.scene.getWorldPosition(new THREE.Vector3()))
+				console.log(particle.texture)
 				// @ts-ignore
-				this.physics.debug ? this.physics.debug?.disable() : this.physics.debug?.enable()
 				//console.log(laser, laser.getWorldPosition(new THREE.Vector3()))
 			}
 		//	if (event.key == 'v') {
@@ -351,6 +355,8 @@ class MainScene extends ExtendedScene3D {
   update() {
 		//this.camera.position.lerp(this.camera.getWorldPosition(new THREE.Vector3()), 0.5)
 		//this.camera.lookAt(this.player.position)
+
+		// @ts-ignore
 		
 		
 
@@ -387,26 +393,30 @@ class MainScene extends ExtendedScene3D {
 		
 
 		// update player
-		this.player.setAttitudeControlTarget(this.enemy.quaternion)
-	  this.player.updateThrottle()
-    this.player.updateAttitudeControl()
-		this.player.updateMomentumStablizer()
-		this.player.updateForce()
+		//this.player.setAttitudeControlTarget(this.enemy.quaternion)
 
-		
+		//this.enemy.update()
+		this.enemy.applyThrottleControl(new THREE.Vector3(1, 0, 0))
+	  this.player.update()
+
 
 		// this.ai.update()
-		this.enemy.setAttitudeControlTarget(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(-1, 0, 0) , new THREE.Vector3().subVectors(this.enemy.position.clone(), this.player.position.clone()).normalize()  ))
-		this.enemy.updateMomentumStablizer()
-		this.enemy.lookAt(this.player.position)
-		this.enemy.updateForce()
 
 		// なぜか ammo.threeObject を書き換えても PhysicsBody と ExtendedObject3D のトランスフォームの同期がなくなるので
-		this.player.position.set(this.player.body.position.x, this.player.body.position.y, this.player.body.position.z)
-		const tmpQuaternion = new THREE.Quaternion(this.player.body.quaternion.x, this.player.body.quaternion.y, this.player.body.quaternion.z, this.player.body.quaternion.w)
-		this.player.setRotationFromQuaternion(tmpQuaternion)
-
+		//this.player.position.set(this.player.body.position.x, this.player.body.position.y, this.player.body.position.z)
+		//const tmpQuaternion = new THREE.Quaternion(this.player.body.quaternion.x, this.player.body.quaternion.y, this.player.body.quaternion.z, this.player.body.quaternion.w)
+		//this.player.setRotationFromQuaternion(tmpQuaternion)
+		//@ts-ignore
+		//vecdisplay.innerText = this.enemy.control.pos.x
+		//String(this.enemy.control._quat.x) + '\n' + String(this.enemy.control._quat.y) + '\n' + String(this.enemy.control._quat.z) + '\n' + String(this.enemy.control._quat.w)
+		//String(this.player.control.angularVelocity.x) + '\n' + String(this.player.control.angularVelocity.y) + '\n' + String(this.player.control.angularVelocity.z)
+		//String(this.player.quaternion.x) + '\n' + String(this.player.quaternion.y) + '\n' + String(this.player.quaternion.z) + '\n' + String(this.player.quaternion.w)
+		//String(this.player.temp.x) + '\n' + String(this.player.temp.y) + '\n' + String(this.player.temp.z) + '\n' + String(this.player.temp.w)
+		//String(this.player.quaternion.x) + '\n' + String(this.player.quaternion.y) + '\n' + String(this.player.quaternion.z) + '\n' + String(this.player.quaternion.w)
+		//String(this.player.body.velocity.x) + '\n' + String(this.player.body.velocity.y) + '\n' + String(this.player.body.velocity.z)
+	
 		this.executeUpdateQueue()
+		
 	}
 }
 
@@ -421,6 +431,5 @@ const sceneConfig = {
 	},
 	scenes: [MainScene], 
 	antialias: true,
-	
 }
 PhysicsLoader('/src/ammo', () => new Project(sceneConfig))

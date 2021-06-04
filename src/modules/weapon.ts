@@ -66,7 +66,6 @@ export default class Weapon extends ExtendedObject3D {
   destroy() {
   }
   
-
   addUpdateQueue() {
     this.scene3d.addUpdateQueue(this.updateMethod)
   }
@@ -76,13 +75,7 @@ export default class Weapon extends ExtendedObject3D {
 
   }
 
-
-
   // process to execute in the main loop
   update() {
   }
-
-
-
- 
 }

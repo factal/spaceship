@@ -1,37 +1,44 @@
-import * as THREE from "three"
 import Agent from "./agent"
 import './config'
-import { keybinds, maneuvers, reactionControlConfig } from "./config"
+import { agentStateInterface, keybinds, maneuvers } from "./config"
 
-interface stateInterface {
-  type: string // 'agent': default, 'player': player, 'AI': AI
-  hull: number
-  shield: number
-  team: string
-  isMomentumStablizerOn: boolean
-  isAttitudeStablizerOn: boolean
-  isAttitudeControlOn: boolean
-  isControlledByPlayer: boolean
-}
 
-const defaultState: stateInterface = {
+
+const defaultState: agentStateInterface = {
   type: 'agent',
   hull: 100,
   shield: 100,
   team: 'player',
   isMomentumStablizerOn: true,
+  isAircraft_nizationOn: true,
   isAttitudeStablizerOn: true,
   isAttitudeControlOn: false,
-  isControlledByPlayer: false
+  isControlledByPlayer: true,
+  maxVelocity: 1000,
+  maxRotationalVelocity: 8
 }
 
 export default class Player extends Agent {
   throttle: number
   
-  constructor() {
+  constructor(state: agentStateInterface=defaultState) {
     super(defaultState)
 
     this.throttle = 0
+    this.maneuverPerformances = {
+      acceleration: 3.0,
+      deceleration: 3.0,
+      rollLeft: 3.0,
+      rollRight: 3.0,
+      yawLeft: 3.0,
+      yawRight: 3.0,
+      pitchUp: 3.0,
+      pitchDown: 3.0,
+      thrustLeft: 3.0,
+      thrustRight: 3.0,
+      thrustUp: 3.0,
+      thrustDown: 3.0
+    }
   }
 
   addInputListener() {
@@ -53,11 +60,13 @@ export default class Player extends Agent {
       })
 
       // toggle flight assist
-      if (event.key == 'z') this.state.isAttitudeStablizerOn ? this.state.isAttitudeStablizerOn = false : this.state.isAttitudeStablizerOn = true
-      if (event.key == 'x') this.state.isAttitudeControlOn ? this.state.isAttitudeControlOn = false : this.state.isAttitudeControlOn = true
-      if (event.key == 'c') this.state.isMomentumStablizerOn ? this.state.isMomentumStablizerOn = false : this.state.isMomentumStablizerOn = true
+      if (event.key == keybinds.controlSystems.attitudeStablizer) this.state.isAttitudeStablizerOn ? this.state.isAttitudeStablizerOn = false : this.state.isAttitudeStablizerOn = true
+      if (event.key == keybinds.controlSystems.attitudeControl) this.state.isAttitudeControlOn ? this.state.isAttitudeControlOn = false : this.state.isAttitudeControlOn = true
+      if (event.key == keybinds.controlSystems.momentumStabilizer) this.state.isMomentumStablizerOn ? this.state.isMomentumStablizerOn = false : this.state.isMomentumStablizerOn = true
 
-      if (event.key == 't') this.throttle = 0
+      if (event.key == 't') {
+        this.throttle = 0
+      }
     })
 
     // when keyup
@@ -80,17 +89,20 @@ export default class Player extends Agent {
   }
 
   updateThrottle() {
-    // if (this.throttle == 0) {
-    //   this.maneuverControlledByPlayer.acceleration = false
-    //   this.maneuverControlledByPlayer.deceleration = false
-    // } else {
-      this.maneuverControlledByPlayer.acceleration = true
-      this.maneuverControlledByPlayer.deceleration = true
-    // }
-
     if (this.throttleUp) this.throttle += 0.01
     if (this.throttleDown) this.throttle -= 0.01
 
+    this.throttle = Math.min(this.throttle, 1.0)
+    this.throttle = Math.max(this.throttle, -1.0)
+
+    if (this.throttle != 0) {
+      this.maneuverControlledByPlayer.acceleration = true
+      this.maneuverControlledByPlayer.deceleration = true
+    } else {
+      this.maneuverControlledByPlayer.acceleration = false
+      this.maneuverControlledByPlayer.deceleration = false
+    }
+    
     if (this.throttle >= 0) {
       this.maneuverControlledByPlayerThrottles.acceleration = Math.abs(this.throttle) // abs 不要だけど一応
       this.maneuverControlledByPlayerThrottles.deceleration = 0
@@ -99,5 +111,11 @@ export default class Player extends Agent {
       this.maneuverControlledByPlayerThrottles.acceleration = 0 // ここで直接スロットルをいじってるので注意！！！！
       this.maneuverControlledByPlayerThrottles.deceleration = Math.abs(this.throttle)
     }
+  }
+
+  update() {
+    this.control.update()
+    this.updateThrottle()
+    this.updateForce()
   }
 }

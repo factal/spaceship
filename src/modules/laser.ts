@@ -23,7 +23,7 @@ export default class Laser extends Weapon {
   dummyBullet: DummyBulletFactory
   hasHit: boolean
 
-  constructor(scene3d: ExtendedScene3D, range: number=100, duration: number=0.1, thickness: number= 1, color: number=0xff4f00) {
+  constructor(scene3d: ExtendedScene3D, range: number=1000, duration: number=0.1, thickness: number= 1, color: number=0xff4f00) {
     super(scene3d)
     
     

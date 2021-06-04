@@ -1,28 +1,21 @@
 import { ExtendedObject3D } from "@enable3d/ammo-physics"
 import * as THREE from "three"
-import { reactionControlConfig } from "./config"
-import { vec3ToArr } from "./utility"
+import { agentStateInterface, reactionControlConfig } from "./config"
+import Control from "./control"
+import { objToVec3 } from "./utility"
 
-interface stateInterface {
-  type: string // 'agent': default, 'player': player, 'AI': AI
-  hull: number
-  shield: number
-  team: string
-  isMomentumStablizerOn: boolean
-  isAttitudeStablizerOn: boolean
-  isAttitudeControlOn: boolean
-  isControlledByPlayer: boolean
-}
-
-const defaultState: stateInterface = {
+const defaultState: agentStateInterface = {
   type: 'agent',
   hull: 100,
   shield: 100,
   team: 'default',
-  isMomentumStablizerOn: true,
+  isMomentumStablizerOn: false,
+  isAircraft_nizationOn: true,
   isAttitudeStablizerOn: true,
   isAttitudeControlOn: true,
-  isControlledByPlayer: false
+  isControlledByPlayer: false,
+  maxVelocity: 40,
+  maxRotationalVelocity: 3
 }
 
 interface maneuverInterface {
@@ -71,13 +64,20 @@ const calcEulerEomMatrix = (euler: THREE.Euler) => {
 }
 
 export default class Agent extends ExtendedObject3D {
+  mass: number
+  rotationCount: number
+
+  control: Control
+
+  updateMethod: Function
+
   attitudeControlTarget: THREE.Quaternion
 
   attitudeControlFactor: THREE.Vector3
   localRotationVelocity: THREE.Vector3
 
   
-  state: stateInterface
+  state: agentStateInterface
   maneuverPerformances: maneuverInterface
   maneuverThrottles: maneuverInterface
   maneuverControlledByPlayer: maneuverBooleanInterface
@@ -87,27 +87,33 @@ export default class Agent extends ExtendedObject3D {
 
 
   
-  constructor(state: stateInterface=defaultState) {
+  constructor(state: agentStateInterface=defaultState) {
     super()
 
+    this.mass = 1
+    this.rotationCount = 0
+
     this.state = state
-    this.attitudeControlTarget = new THREE.Quaternion()
+
+    this.control = new Control(this)
+
+    this.attitudeControlTarget = new THREE.Quaternion(-1, 0, 0, 0).normalize()
     this.localRotationVelocity = new THREE.Vector3()
     this.attitudeControlFactor = new THREE.Vector3()
 
     this.maneuverPerformances = {
-      acceleration: 2.0,
-      deceleration: 2.0,
-      rollLeft: 2.0,
-      rollRight: 2.0,
-      yawLeft: 2.0,
-      yawRight: 2.0,
-      pitchUp: 2.0,
-      pitchDown: 2.0,
-      thrustLeft: 2.0,
-      thrustRight: 2.0,
-      thrustUp: 2.0,
-      thrustDown: 2.0
+      acceleration: 1.0,
+      deceleration: 1.0,
+      rollLeft: 1.0,
+      rollRight: 1.0,
+      yawLeft: 1.0,
+      yawRight: 1.0,
+      pitchUp: 1.0,
+      pitchDown: 1.0,
+      thrustLeft: 1.0,
+      thrustRight: 1.0,
+      thrustUp: 1.0,
+      thrustDown: 1.0
     }
 
     // determines the final output ot the thrusters
@@ -159,50 +165,54 @@ export default class Agent extends ExtendedObject3D {
 
     this.throttleUp = false
     this.throttleDown = false
+
+    this.updateMethod = this.update.bind(this)
   }
 
-  generateForce(property: string, direction: THREE.Vector3, angular = false) {
+  generateForce(positiveProp: string, negativeProp: string, positiveDirection: THREE.Vector3, negativeDirection: THREE.Vector3, angular = false) {
     // clipping
-    let power = 0
-    if (this.maneuverControlledByPlayer[property]) {
-      power = Math.min(this.maneuverControlledByPlayerThrottles[property], 1.0)
-      power = Math.max(this.maneuverControlledByPlayerThrottles[property], 0.0)
+    let positivePower: number, negativePower: number
+    if (this.maneuverControlledByPlayer[positiveProp] || this.maneuverControlledByPlayer[negativeProp]) {
+      positivePower = Math.min(this.maneuverControlledByPlayerThrottles[positiveProp], 1.0)
+      positivePower = Math.max(positivePower, 0.0)
+      negativePower = Math.min(this.maneuverControlledByPlayerThrottles[negativeProp], 1.0)
+      negativePower = Math.max(negativePower, 0.0)
     } else {
-      power = Math.min(this.maneuverThrottles[property], 1.0)
-      power = Math.max(this.maneuverThrottles[property], 0.0)
+      positivePower = Math.min(this.maneuverThrottles[positiveProp], 1.0)
+      positivePower = Math.max(positivePower, 0.0)
+      negativePower = Math.min(this.maneuverThrottles[negativeProp], 1.0)
+      negativePower = Math.max(negativePower, 0.0)
     }
 
     if (angular) {
       // calc torque
-      const force = direction.multiplyScalar(power * this.maneuverPerformances[property])
+      const positiveForce = positiveDirection.multiplyScalar(positivePower * this.maneuverPerformances[positiveProp])
+      const negativeForce = negativeDirection.multiplyScalar(negativePower * this.maneuverPerformances[negativeProp])
 
-      this.body.applyLocalTorque(force.x, force.y, force.z)
+      this.body.applyLocalTorque(positiveForce.x, positiveForce.y, positiveForce.z)
+      this.body.applyLocalTorque(negativeForce.x, negativeForce.y, negativeForce.z)
+
     } else {
+      
       // calc force
-      const localForce = direction.multiplyScalar(power * this.maneuverPerformances[property])
-      const worldForce = this.localToWorld(localForce)
-      const force = worldForce.sub(this.position)
+      const positiveForce = new THREE.Vector3().subVectors(this.localToWorld(positiveDirection), this.position).normalize().multiplyScalar(positivePower * this.maneuverPerformances[positiveProp])
+      const negativeForce = new THREE.Vector3().subVectors(this.localToWorld(negativeDirection), this.position).normalize().multiplyScalar(negativePower * this.maneuverPerformances[negativeProp])
 
-      this.body.applyForce(force.x, force.y, force.z)
+      this.body.applyForce(positiveForce.x, positiveForce.y, positiveForce.z)
+      this.body.applyForce(negativeForce.x, negativeForce.y, negativeForce.z)
     }
   }
 
   updateForce(): void {
-    this.generateForce('acceleration', new THREE.Vector3(1, 0, 0), false)
-    this.generateForce('deceleration', new THREE.Vector3(-1, 0, 0), false)
-    this.generateForce('rollRight', new THREE.Vector3(1, 0, 0), true)
-    this.generateForce('rollLeft', new THREE.Vector3(-1, 0, 0), true)
-    this.generateForce('yawRight', new THREE.Vector3(0, -1, 0), true)
-    this.generateForce('yawLeft', new THREE.Vector3(0, 1, 0), true)
-    this.generateForce('pitchUp', new THREE.Vector3(0, 0, 1), true)
-    this.generateForce('pitchDown', new THREE.Vector3(0, 0, -1), true)
-    this.generateForce('thrustRight', new THREE.Vector3(0, 0, 1), false)
-    this.generateForce('thrustLeft', new THREE.Vector3(0, 0, -1), false)
-    this.generateForce('thrustUp', new THREE.Vector3(0, 1, 0), false)
-    this.generateForce('thrustDown', new THREE.Vector3(0, -1, 0), false)
+    this.generateForce('acceleration', 'deceleration', new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0), false)
+    this.generateForce('rollRight', 'rollLeft', new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0), true)
+    this.generateForce('yawLeft', 'yawRight', new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0), true)
+    this.generateForce('pitchUp', 'pitchDown', new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1), true)
+    this.generateForce('thrustRight', 'thrustLeft', new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1), false)
+    this.generateForce('thrustUp', 'thrustDown', new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0), false)
   }
 
-  applyThrottleControl(throttleControl: THREE.Vector3) {
+  applyThrottleControl(throttleControl: THREE.Vector3): void {
     if (throttleControl.x > 0) {
       this.maneuverThrottles.acceleration = Math.abs(throttleControl.x)
       this.maneuverThrottles.deceleration = 0
@@ -256,55 +266,8 @@ export default class Agent extends ExtendedObject3D {
     }
   }
 
-  updateMomentumStablizer(): void {
-    // need revision
-    if (this.state.isMomentumStablizerOn) {
-      const simpleLinearFactor = -0.05
-      this.body.applyForce(simpleLinearFactor * this.body.velocity.x, simpleLinearFactor * this.body.velocity.y, simpleLinearFactor * this.body.velocity.z)
-    }
+  update() {
+    this.control.update()
+    this.updateForce()
   }
-
-
-  setAttitudeControlTarget(quaternion: THREE.Quaternion) {
-    this.attitudeControlTarget.copy(quaternion).invert()
-  }
-
-  _calcThrottle(thrusterControl: THREE.Vector3, x: number, y: number, z: number) {
-    return (Math.abs(thrusterControl.x) / reactionControlConfig.rotationResponse) * x + (Math.abs(thrusterControl.y) / reactionControlConfig.rotationResponse) * y + (Math.abs(thrusterControl.z) / reactionControlConfig.rotationResponse) * z 
-  }
-
-  /**
-   * Attitude Control System
-   * see DOI: 10.1080/00207721.2013.815824
-   */
-  updateAttitudeControl() {
-    const targetQuaternion = this.attitudeControlTarget
-
-    // localRotationVelocityVector
-    // this.localRotationVelocity
-
-    const rotationMatrix = new THREE.Matrix4().makeRotationFromQuaternion(this.quaternion)
-    rotationMatrix.transpose()
-
-    const localRotationVelocityVector = new THREE.Vector3(this.body.angularVelocity.x, this.body.angularVelocity.y, this.body.angularVelocity.z)
-    localRotationVelocityVector.applyMatrix4(rotationMatrix)
-
-    this.localRotationVelocity.copy(localRotationVelocityVector)
-
-    const rotationVelocityFactor = new THREE.Vector3().copy(localRotationVelocityVector).applyMatrix3(reactionControlConfig.rotationVelocityFeedbackGain).multiplyScalar(-1)
-    
-
-    const correctionTarget = new THREE.Euler().setFromQuaternion(targetQuaternion.multiply(this.quaternion))
-    const eulerFactor = new THREE.Vector3(correctionTarget.x, correctionTarget.y, correctionTarget.z).applyMatrix3(reactionControlConfig.eulerFeedbackGain).applyMatrix3(calcEulerEomMatrix(correctionTarget)).multiplyScalar(-1)
-
-
-    const throttleControl = new THREE.Vector3().add(rotationVelocityFactor)
-    if (this.state.isAttitudeControlOn) throttleControl.add(eulerFactor)
-
-    // apply Throttle
-    if (this.state.isAttitudeStablizerOn || this.state.isAttitudeControlOn) {
-      this.applyRotationalThrottleControl(throttleControl)
-    }
-  }
-
 }

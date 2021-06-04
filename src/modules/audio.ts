@@ -1,8 +1,6 @@
 import { Scene3D } from "enable3d"
 import * as THREE from "three"
 
-
-
 export class AudioHandler {
   scene: Scene3D
   listener: THREE.AudioListener

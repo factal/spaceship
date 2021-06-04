@@ -4,6 +4,7 @@ export const skyboxImage = 'corona'
 
 interface keybindsInterface {
   maneuvers: {[key: string]: string}
+  controlSystems: {[key: string]: string}
   weapons: {[key: string]: string}
 }
 
@@ -22,8 +23,14 @@ export const keybinds: keybindsInterface = {
     thrustUp: 'i',
     thrustDown: 'k',
   },
+  controlSystems: {
+    momentumStabilizer: 'c',
+    Aircraft_nization: 'v',
+    attitudeStablizer: 'z',
+    attitudeControl: 'x'
+  },
   weapons: {
-    main: 'v'
+    main: 'b'
   },
 }
 
@@ -33,10 +40,10 @@ export const reactionControlConfig = {
     1, 0, 0, 
     0, 1, 0,
     0, 0, 1 ),
-  eulerFeedbackGain: new THREE.Matrix3().set( // Kp
-    1, 0, 0,
-    0, 1, 0,
-    0, 0, 1 ),
+  deviationQuaternionFeedbackGain: new THREE.Matrix3().set( // Kp
+    20, 0, 0,
+    0, 20, 0,
+    0, 0, 20 ),
   momentumResponse: 0.5, // high -> dull correction response
 }
 
@@ -63,4 +70,18 @@ export interface weaponConfigInterface {
 
 export const defaultWeaponConfig = {
   part: 'main'
+}
+
+export interface agentStateInterface {
+  type: string // 'agent': default, 'player': player, 'AI': AI
+  hull: number
+  shield: number
+  team: string
+  isMomentumStablizerOn: boolean
+  isAircraft_nizationOn: boolean
+  isAttitudeStablizerOn: boolean
+  isAttitudeControlOn: boolean
+  isControlledByPlayer: boolean
+  maxVelocity: number
+  maxRotationalVelocity: number
 }
