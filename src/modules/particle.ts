@@ -1,35 +1,40 @@
 import { ExtendedObject3D } from '@enable3d/ammo-physics'
-import { Scene3D } from 'enable3d'
 import * as THREE from 'three'
+import { ExtendedScene3D } from './scene'
 
-let randomColor = Math.floor(Math.random()*16777215).toString(16);
 
-export default class Particles extends ExtendedObject3D {
-  scene3d: Scene3D
-  texture: THREE.Texture | null
+export class ParticleHelper {
+  scene3d: ExtendedScene3D
+
+  constructor(scene3d: ExtendedScene3D) {
+    this.scene3d = scene3d
+  }
+
+  createParticles(materialConfig: THREE.PointsMaterialParameters): Particles {
+    const particles = new Particles(this.scene3d, materialConfig)
+    return particles
+  }
+}
+
+export class Particles extends ExtendedObject3D {
+  scene3d: ExtendedScene3D
+
   geometry: THREE.BufferGeometry
-  // @ts-ignore
   particleMaterial: THREE.PointsMaterial
 
-  constructor(scene3d: Scene3D) {
+  constructor(scene3d: ExtendedScene3D, materialConfig: THREE.PointsMaterialParameters) {
     super()
 
     this.scene3d = scene3d
-    this.texture = null
+
     this.geometry = new THREE.BufferGeometry()
-    this.scene3d.load.texture('/assets/textures/point_cloud_texture.png').then( (texture) => {
-      this.texture = texture
-      this.particleMaterial = new THREE.PointsMaterial({map:this.texture, size: 3, blending: THREE.AdditiveBlending,transparent: true})
-      
-    })
-    
-   
+    this.particleMaterial = new THREE.PointsMaterial(materialConfig)
   }
 
   init() {
     const vertices_base = [];
     const colors_base = [];
-    for (let i = 0; i < 300 ; i ++) {
+    for (let i = 0; i < 1000 ; i ++) {
       const x = Math.floor(Math.random() * 1000 - 500);
       const y = Math.floor(Math.random() * 1000 - 500);
       const z = Math.floor(Math.random() * 1000 - 500);
@@ -47,25 +52,7 @@ export default class Particles extends ExtendedObject3D {
   }
 
   create() {
-    const points = new THREE.Points(this.geometry, this.material)
-    const mat = new THREE.SpriteMaterial({map: this.texture})
-    const aaa = new THREE.Sprite(mat)
-    this.add(aaa)
+    const points = new THREE.Points(this.geometry, this.particleMaterial)
     this.add(points)
   }
-  
-  async loadTexture() {
-    this.scene3d.load.texture('/assets/textures/point_cloud_texture.png').then( (texture) => {
-      this.texture = texture
-    })
-  }
-
-  addVertex(x: number | THREE.Vector3=0, y: number=0, z: number=0) {
-    if (typeof x == 'number') {
-      x = new THREE.Vector3(x, y, z)
-    }
-
-  }
-
-
 }

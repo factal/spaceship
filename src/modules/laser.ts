@@ -7,7 +7,6 @@ import Weapon from './weapon'
 import { ExtendedScene3D } from './scene'
 import DummyBulletFactory from './bullet'
 
-
 export default class Laser extends Weapon {
   range: number
   muzzleFlash: THREE.PointLight
@@ -25,7 +24,6 @@ export default class Laser extends Weapon {
 
   constructor(scene3d: ExtendedScene3D, range: number=1000, duration: number=0.1, thickness: number= 1, color: number=0xff4f00) {
     super(scene3d)
-    
     
     this.range = range
     this.cookedTextureUrl = config.defaultLaserCookedTexture
@@ -45,7 +43,7 @@ export default class Laser extends Weapon {
     this.addSound('laser_shot_1')
     this.addSound('laser_shot_2')
 
-    // laser body
+    // laser body texture
     const canvas = this.generateLaserBodyCanvas()
 
     const laserTexture = new THREE.Texture(canvas)
@@ -175,13 +173,10 @@ export default class Laser extends Weapon {
             const impluse = vec.clone().multiplyScalar(20) // impluse
             vec.subScalar(0.5).add(start)
             start.addScalar(2)
-
             
             this.dummyBullet.create(new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z), impluse)
           }
-          
         }
-
       } else {
         this.cookedSprite.visible = false
         this.laserGroup.scale.x = this.range

@@ -1,19 +1,29 @@
-import { Scene3D } from "enable3d";
-import * as THREE from "three";
-import { AudioHandler } from "./audio";
-
-
+import * as THREE from 'three'
+import { Scene3D } from 'enable3d'
+import TextureHandler from './texture'
+import ModelHandler from './model'
+import { AudioHandler } from './audio'
+import PostEffectHandler from './postEffect'
 
 export class ExtendedScene3D extends Scene3D {
+  textureHandler: TextureHandler
+  modelHandler: ModelHandler
   audioHandler: AudioHandler
-  ui: THREE.Scene
+  postEffectHandler: PostEffectHandler
+
+  ui: UI
   updateQueue: Set<Function>
 
   constructor() {
     super()
     
+    this.textureHandler = new TextureHandler(this)
+    this.modelHandler = new ModelHandler(this)
     this.audioHandler = new AudioHandler(this)
-    this.ui = new THREE.Scene()
+    this.postEffectHandler = new PostEffectHandler()
+
+    this.ui = new UI()
+
     this.updateQueue = new Set()
   }
 
@@ -32,14 +42,11 @@ export class ExtendedScene3D extends Scene3D {
   }
 }
 
-
-
 export class UI extends THREE.Scene {
   camera: THREE.Camera
   
   constructor() {
     super()
-
 
     const width = window.innerWidth
     const height = window.innerHeight

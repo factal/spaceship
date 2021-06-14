@@ -1,0 +1,516 @@
+import * as THREE from "three";
+import { ExtendedObject3D } from "enable3d";
+import { ExtendedScene3D } from "./scene";
+
+const baseVertexVars = 
+`
+  attribute float nodeID;
+  attribute float nodeVertexID;
+  attribute vec3 nodeCenter;
+
+  uniform float minID;
+  uniform float maxID;
+  niform float trailLength;
+  uniform float maxTrailLength;
+  uniform float verticesPerNode;
+  uniform vec2 textureTileFactor;
+
+  uniform vec4 headColor;
+  uniform vec4 tailColor;
+
+  varying vec4 vColor;
+`
+
+const texturedVertexVars = baseVertexVars + 
+`
+  varying vec2 vUV;
+  uniform float dragTexture;
+`
+
+const baseFragmentVars = 
+`
+  varying vec4 vColor;
+  uniform sampler2D texture;
+`
+const texturedFragmentVars = baseFragmentVars + 
+`
+varying vec2 vUV;
+`
+
+const vertexShaderCore = 
+`
+  float fraction = ( maxID - nodeID ) / ( maxID - minID );
+  vColor = ( 1.0 - fraction ) * headColor + fraction * tailColor;
+  vec4 realPosition = vec4( ( 1.0 - fraction ) * position.xyz + fraction * nodeCenter.xyz, 1.0 );
+`
+
+const baseVertexShader = baseVertexVars +
+`
+  void main() {
+    float fraction = ( maxID - nodeID ) / ( maxID - minID );
+    vColor = ( 1.0 - fraction ) * headColor + fraction * tailColor;
+    vec4 realPosition = vec4( ( 1.0 - fraction ) * position.xyz + fraction * nodeCenter.xyz, 1.0 );
+
+    gl_Position = projectionMatrix * viewMatrix * realPosition;
+  }
+`
+
+const baseFragmentShader = baseFragmentVars + 
+`
+  void main() {
+    gl_FragColor = vColor;
+  }
+`
+
+const texturedVertexShader = texturedVertexVars +
+`
+  void main() {
+    float fraction = ( maxID - nodeID ) / ( maxID - minID );
+    vColor = ( 1.0 - fraction ) * headColor + fraction * tailColor;
+    vec4 realPosition = vec4( ( 1.0 - fraction ) * position.xyz + fraction * nodeCenter.xyz, 1.0 );
+    float s = 0.0;
+    float t = 0.0;
+    if ( dragTexture == 1.0 ) {
+      s = fraction *  textureTileFactor.s;
+      t = ( nodeVertexID / verticesPerNode ) * textureTileFactor.t;
+    } else {
+      s = nodeID / maxTrailLength * textureTileFactor.s;
+      t = ( nodeVertexID / verticesPerNode ) * textureTileFactor.t;
+    }
+      vUV = vec2( s, t );
+      gl_Position = projectionMatrix * viewMatrix * realPosition;
+  }
+`
+
+const texturedFragmentShader = texturedFragmentVars +
+`
+  void main() {
+    vec4 textureColor = texture2D( texture, vUV );
+    gl_FragColor = vColor * textureColor;
+}
+`
+
+export default class TrailRenderer extends ExtendedObject3D {
+  scene3d: ExtendedScene3D
+
+  material: THREE.ShaderMaterial
+
+  targetObject: ExtendedObject3D
+
+  isActive: boolean
+  orientToMovement: boolean
+
+  mesh: THREE.Mesh | null
+
+  nodeCenters: null
+  lastNodeCenter: null
+  currentNodeCenter: null
+
+  lastOrientationDir: null
+
+  nodeIDs: null
+	currentLength: number
+	currentEnd: number
+	currentNodeID: number
+
+  maxHeadVertices: number
+  localOrientationTarget: THREE.Vector3
+  localOrientationDirection: THREE.Vector3
+  localHeadOrigin: THREE.Vector3
+  positionComponentCount: number
+  UVComponentCount: number
+  indicesPerFace: number
+  facesPerQuad: number
+  facesPerNode: number
+  faceIndicesPerNode: number
+
+  vertexCount: number
+  faceCount: number
+
+  length: number
+
+  localHeadGeometry: Array<THREE.Vector3>
+
+  verticesPerNode: number
+
+  shader: {
+    baseVertexVars: string
+    texturedVertexVars: string
+    baseFragmentVars: string
+    texturedFragmentVars: string
+    vertexShaderCore: string
+    baseVertexShader: string
+    baseFragmentShader: string
+    texturedVertexShader: string
+    texturedFragmentShader: string
+  }
+
+  constructor(scene3d: ExtendedScene3D, orientToMovement: boolean=false) {
+    super()
+
+    this.scene3d = scene3d
+
+    this.material  = new THREE.ShaderMaterial()
+
+    this.targetObject = new ExtendedObject3D()
+
+    this.isActive = false
+    this.orientToMovement = orientToMovement
+
+    this.mesh = null
+
+    this.currentLength = 0
+    this.currentEnd = 0
+    this.currentNodeID = 0
+
+    this.maxHeadVertices = 128
+    this.localOrientationTarget = new THREE.Vector3(1, 0, 0)
+    this.localOrientationDirection = new THREE.Vector3(0, 0, -1)
+    this.localHeadOrigin = new THREE.Vector3(0, 0, 0)
+    this.positionComponentCount = 3
+    this.UVComponentCount = 2
+    this.indicesPerFace = 3
+    this.facesPerQuad = 2
+    this.facesPerNode = 0
+    this.faceIndicesPerNode = 0
+
+    this.vertexCount = 0
+    this.faceCount = 0
+
+    this.length = 0
+
+    this.localHeadGeometry = []
+
+    this.verticesPerNode = 0
+
+    this.shader = {
+      baseVertexVars: baseVertexVars,
+      texturedVertexVars: texturedVertexVars,
+      baseFragmentVars: baseFragmentVars,
+      texturedFragmentVars: texturedFragmentVars,
+      vertexShaderCore: vertexShaderCore,
+      baseVertexShader: baseVertexShader,
+      baseFragmentShader: baseFragmentShader,
+      texturedVertexShader: texturedVertexShader,
+      texturedFragmentShader: texturedFragmentShader
+    }
+
+    this.shader.baseVertexVars
+  }
+
+  createMaterial(vertexShader: string=this.shader.baseVertexShader, fragmentShader: string=this.shader.baseFragmentShader, customUniforms: {[uniform: string]: THREE.IUniform<any>}={}) {
+	  const uniforms: {[uniform: string]: THREE.IUniform<any>} = {
+      trailLength: {value: null},
+      minID: {value: null},
+      maxID: {value: null},
+      dragTexture: {value: null},
+      maxTrailLength: {value: null},
+      textureTileFactor: {value: null},
+      headColor: {value: new THREE.Vector4()},
+      tailColor: {value: new THREE.Vector4()},
+
+      ...customUniforms
+    }
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: uniforms,
+      vertexShader: vertexShader,
+      fragmentShader: fragmentShader,
+
+      transparent: true,
+      alphaTest: 0.5,
+
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.SrcAlphaFactor,
+      blendDst: THREE.OneMinusDstAlphaFactor,
+      blendEquation: THREE.AddEquation,
+
+      depthTest: true,
+      depthWrite: false,
+
+      side: THREE.DoubleSide
+    })
+
+    return material
+  }
+
+  // createBaseMaterial(customUniforms: {[uniform: string]: THREE.IUniform<any>}={}) {
+  // }
+
+  createTexturedMaterial(customUniforms: {[uniform: string]: THREE.IUniform<any>}={}) {
+    const unifroms: {[uniform: string]: THREE.IUniform<any>} = {
+      texture: {value: null},
+
+      ...customUniforms
+    }
+
+    return this.createMaterial(this.shader.texturedVertexShader, this.shader.texturedFragmentShader, unifroms)
+  }
+
+  init(material, length, dragTexture, localHeadWidth, localHeadGeometry, targetObject) {
+  }
+
+  initLocalHeadGeometry(localHeadWidth: number=1.0, localHeadGeometry: Array<THREE.Vector3> | null=null) {
+    if (localHeadGeometry!) {
+      this.verticesPerNode = 0
+      for (let i=0; i < localHeadGeometry.length && i < this.maxHeadVertices; i++) {
+        const vertex = localHeadGeometry[i]
+        this.localHeadGeometry.push(vertex)
+        this.verticesPerNode++
+      }
+    } else {
+      const halfWidth = localHeadWidth / 2.0
+
+      this.localHeadGeometry.push(new THREE.Vector3(-halfWidth, 0, 0))
+      this.localHeadGeometry.push(new THREE.Vector3(halfWidth, 0, 0))
+
+      this.verticesPerNode = 2
+    }
+
+    this.facesPerNode = (this.verticesPerNode - 1) * 2
+    this.faceIndicesPerNode = this.facesPerNode * 3
+  }
+
+  initGeometry() {
+    this.vertexCount = this.length * this.verticesPerNode
+    this.faceCount = this.length * this.facesPerNode
+
+    const geometry = new THREE.BufferGeometry()
+
+    const nodeIDs = new Float32Array(this.vertexCount)
+    const nodeVertexID = new Float32Array(this.vertexCount * this.verticesPerNode)
+    const positions = new Float32Array(this.vertexCount * this.positionComponentCount)
+    const nodeCenters = new Float32Array(this.vertexCount * this.positionComponentCount)
+    const UVs = new Float32Array(this.vertexCount * this.UVComponentCount)
+    const indices = new Uint16Array( this.faceCount * this.indicesPerFace)
+
+    const nodeIDAttribute = new THREE.BufferAttribute(nodeIDs, 1)
+    geometry.setAttribute('nodeID', nodeIDAttribute)
+
+    const nodeVertexIDAttribute = new THREE.BufferAttribute(nodeVertexID, 1)
+    geometry.setAttribute('nodeVertexID', nodeVertexIDAttribute)
+
+    const nodeCenterAttribute = new THREE.BufferAttribute(nodeCenters, this.positionComponentCount)
+    geometry.setAttribute('nodeCenter', nodeCenterAttribute)
+
+    const positionAttribute = new THREE.BufferAttribute(positions, this.positionComponentCount)
+    geometry.setAttribute('position', positionAttribute)
+
+    const UVAttribute = new THREE.BufferAttribute(UVs, this.UVComponentCount)
+    geometry.setAttribute('uv', UVAttribute)
+
+    const indexAttribute = new THREE.BufferAttribute(indices, 1)
+    geometry.setIndex(indexAttribute)
+
+    this.geometry = geometry
+  }
+
+  zeroVertices() {
+    const positions = this.geometry.getAttribute('position')
+    
+    for (let i=0; i < this.vertexCount; i++) {
+      // maybe
+      positions.setXYZ(i, 0, 0, 0)
+    }
+
+    positions.needsUpdate = true
+    positions. = -1 yokuwakarann
+  }
+
+  zeroIndices() {
+
+  }
+
+  formInitFaces() {
+
+  }
+
+  initMesh() {
+    this.mesh = new THREE.Mesh(this.geometry, this.material)
+    this.mesh.matrixAutoUpdate = false
+  }
+
+  destroyMesh() {
+    if (this.mesh!) {
+      this.scene3d.scene.remove(this.mesh)
+      this.mesh = null
+    }
+  }
+
+  reset() {
+    this.currentLength = 0
+    this.currentEnd = -1
+
+    this.lastNodeCenter = null
+    this.currentNodeCenter = null
+    this.lastOrientationDir = null
+
+    this.currentNodeID = 0
+
+    this.formInitFaces()
+    this.zeroVertices()
+
+    this.geometry.setDrawRange(0, 0)
+  }
+
+  updateUniforms() {
+    if (this.currentLength < this.length) {
+      // @ts-ignore
+      this.material.uniforms.minID.value = 0
+    } else {
+      // @ts-ignore
+      this.material.uniforms.minID.value = this.currentNodeID - this.length
+    }
+    // @ts-ignore
+    this.material.uniforms.maxID.value = this.currentNodeID
+    // @ts-ignore
+    this.material.uniforms.trailLength.value = this.currentLength
+    // @ts-ignore
+	  this.material.uniforms.maxTrailLength.value = this.length
+    // @ts-ignore
+	  this.material.uniforms.verticesPerNode.value = this.verticesPerNode
+  }
+
+  advance() {
+    const orientationTangent = new THREE.Vector3()
+    const position = new THREE.Vector3()
+    const offset = new THREE.Vector3()
+    const tempMatrix4 = new THREE.Matrix4()
+
+    this.targetObject.updateMatrixWorld()
+    tempMatrix4.copy(this.targetObject.matrixWorld)
+
+    this.advanceWithTransform(tempMatrix4)
+    this.updateUniforms()
+  }
+
+  advanceWithPositionAndOrientation(nextPosition: THREE.Vector3, orientationTangent: THREE.Vector3) {
+    this.advenceGeometry({position: nextPosition, tangent: orientationTangent}, null)
+  }
+
+  advanceWithTransform(transformMatrix: THREE.Matrix4) {
+    this.advanceGeometry(null, transformMatrix)
+  }
+
+  advenceGeometry(positionAndOrientation, transformMatrix: THREE.Matrix4) {
+    const nextIndex = this.currentEnd + 1 >= this.length ? 0 : this.currentEnd + 1
+
+    if( transformMatrix ) {
+
+			this.updateNodePositionsFromTransformMatrix( nextIndex, transformMatrix );
+
+		} else {
+
+			this.updateNodePositionsFromOrientationTangent( nextIndex, positionAndOrientation.position, positionAndOrientation.tangent );
+		}
+
+		if ( this.currentLength >= 1 ) {
+
+			var connectRange = this.connectNodes( this.currentEnd , nextIndex );
+			var disconnectRange = null;
+
+			if( this.currentLength >= this.length ) {
+
+				var disconnectIndex  = this.currentEnd + 1  >= this.length ? 0 : this.currentEnd + 1;
+				disconnectRange = this.disconnectNodes( disconnectIndex );
+
+			}
+
+		}
+
+		if( this.currentLength < this.length ) {
+
+			this.currentLength ++;
+
+		}
+
+		this.currentEnd ++;
+		if ( this.currentEnd >= this.length ) {
+
+			this.currentEnd = 0;
+
+		}
+
+		if ( this.currentLength >= 1 ) {
+
+			if( this.currentLength < this.length ) {
+
+				this.geometry.setDrawRange( 0, ( this.currentLength - 1 ) * this.faceIndicesPerNode);
+
+			} else {
+
+				this.geometry.setDrawRange( 0, this.currentLength * this.faceIndicesPerNode);
+
+			}
+
+		}
+		
+		this.updateNodeID( this.currentEnd,  this.currentNodeID );
+		this.currentNodeID ++;
+  }
+
+  updateHead() {
+    const tempMatrix4 = new THREE.Matrix4();
+
+		if( this.currentEnd < 0 ) return;
+
+		this.targetObject.updateMatrixWorld();
+		tempMatrix4.copy( this.targetObject.matrixWorld );
+
+		this.updateNodePositionsFromTransformMatrix( this.currentEnd, tempMatrix4 );
+	}
+
+  updateNodeID(nodeIndex: number, id: number) {
+    this.nodeIDs[ nodeIndex ] = id;
+
+	  var nodeIDs = this.geometry.getAttribute( 'nodeID' );
+	  var nodeVertexIDs = this.geometry.getAttribute( 'nodeVertexID' );
+
+	  for ( var i = 0; i < this.VerticesPerNode; i ++ ) {
+
+		  var baseIndex = nodeIndex * this.VerticesPerNode + i ;
+	  	nodeIDs.array[ baseIndex ] = id;
+	  	nodeVertexIDs.array[ baseIndex ] = i;
+
+	  }	
+
+	  nodeIDs.needsUpdate = true;
+  	nodeVertexIDs.needsUpdate = true;
+
+  	nodeIDs.updateRange.offset = nodeIndex * this.VerticesPerNode; 
+	  nodeIDs.updateRange.count = this.VerticesPerNode;
+
+	  nodeVertexIDs.updateRange.offset = nodeIndex * this.VerticesPerNode;
+  	nodeVertexIDs.updateRange.count = this.VerticesPerNode;
+  }
+
+
+
+
+  disconnectNodes(scrNodeIndex) {
+    const returnObject = {
+      attribute: null,
+      offset: 0,
+      count: -1
+    }
+
+    const indices = this.geometry.getIndex()
+    for (let i=0; i < this.localHeadGeometry.length - 1; i++) {
+
+    }
+  }
+
+  deactive() {
+    if (this.isActive) {
+      if (this.mesh!) this.scene3d.scene.remove(this.mesh)
+      this.isActive = false
+    }
+  }
+
+  active() {
+    if (!this.isActive) {
+      if (this.mesh!) this.scene3d.scene.add(this.mesh)
+      this.isActive = true
+    }
+  }
+} 

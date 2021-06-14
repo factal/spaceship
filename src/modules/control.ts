@@ -1,8 +1,9 @@
-import { ExtendedObject3D } from "enable3d";
-import * as THREE from "three";
-import Agent from "./agent";
-import { reactionControlConfig } from "./config";
-import { objToVec3, reduceAbsMaxToLess1 } from "./utility";
+import { ExtendedObject3D } from 'enable3d'
+import * as THREE from 'three'
+
+import Agent from './agent'
+import { reactionControlConfig } from './config'
+import { objToVec3 } from './utility'
 
 interface oberverElementInterface {
   agent: Agent
@@ -22,7 +23,7 @@ export default class Control {
   localAngularVelocity: THREE.Vector3
   rotationMatrix: THREE.Matrix3
 
-  target: Agent | null
+  target: ExtendedObject3D | null
   targetVelocity: THREE.Vector3
   targetAngularVelocity: THREE.Vector3
 
@@ -72,16 +73,30 @@ export default class Control {
     this.kd = 0.01
     this.targetVec = new THREE.Vector3()
     this.throttleControl = new THREE.Vector3()
+
+    this.update = this.update.bind(this)
   }
 
   // predict a future position of an Agent given its current position amd velocity
   predictPosition(delta: number=this.delta): THREE.Vector3 {
     if (this.target!) {
       const targetVelocity = this._vec.copy(this.targetVelocity) // this.targetVelocity を汚さないために
-      const predictedPosition = this._vec.addVectors(this.target.position, targetVelocity.multiplyScalar(delta * 1))
+      const predictedPosition = this._vec.addVectors(this.target.position, targetVelocity.multiplyScalar(delta))
       return predictedPosition
     } else {
       return this.object.position
+    }
+  }
+
+  predictArriveTime() {
+    if (this.target!) {
+      const relativePosVec = new THREE.Vector3().subVectors(this.target.position, this.object.position)
+      const projectionVeloVec = relativePosVec.multiplyScalar(objToVec3(this.object.body.velocity).dot(relativePosVec.clone().normalize()))
+      const time = relativePosVec.length() / projectionVeloVec.length()
+      return time
+    } else {
+      // なんとなく決めた
+      return this.delta * 10
     }
   }
 
@@ -186,6 +201,7 @@ export default class Control {
       } else {
         targetPosition = this.target.position
       }
+
       const targetRelativePositionVec = new THREE.Vector3().subVectors(targetPosition, this.object.position)
       
       const targetRelativeVelocityVec = new THREE.Vector3().subVectors(this.targetVelocity, this.velocity)
@@ -196,9 +212,51 @@ export default class Control {
     }
   }
 
-  approachPredictedPosition() {
+  seek(predict: boolean=true) {
+    let targetPosition
+    if (this.target!) {
+      if (predict) {
+        targetPosition = this.predictPosition(this.predictArriveTime()/10)
+      } else {
+        targetPosition = this.target.position
+      }
 
+      const relativePosVec = new THREE.Vector3().subVectors(targetPosition, this.object.position).normalize()
+      const force = new THREE.Vector3().subVectors(relativePosVec, objToVec3(this.object.body.velocity).normalize()).normalize()
+      force.applyMatrix3(this.rotationMatrix)
+      force.setX(1.0)
+      //force.normalize().multiplyScalar(2)
+      this.throttleControl = force
+      this.object.applyThrottleControl(this.throttleControl)
+      
+      // const targetRelativeVelocityVec = new THREE.Vector3().subVectors(this.targetVelocity, this.velocity)
+
+      // this.throttleControl = targetRelativePositionVec.applyMatrix3(this.rotationMatrix).normalize().add(targetRelativeVelocityVec.applyMatrix3(this.rotationMatrix).multiplyScalar(-this.kd))
+      
+      // this.object.applyThrottleControl(this.throttleControl)
+    }
   }
+
+  flee(predict: boolean=true) {
+    let targetPosition
+    if (this.target!) {
+      if (predict) {
+        targetPosition = this.predictPosition()
+      } else {
+        targetPosition = this.target.position
+      }
+
+      const targetRelativePositionVec = new THREE.Vector3().subVectors(targetPosition, this.object.position)
+      
+      const targetRelativeVelocityVec = new THREE.Vector3().subVectors(this.targetVelocity, this.velocity)
+
+      this.throttleControl = targetRelativePositionVec.applyMatrix3(this.rotationMatrix).multiplyScalar(this.kp).add(targetRelativeVelocityVec.applyMatrix3(this.rotationMatrix).multiplyScalar(-this.kd)).multiplyScalar(-1)
+      
+      this.object.applyThrottleControl(this.throttleControl)
+    }
+  }
+
+
 
   momentumStablizer(): void {
     if (this.object.state.isMomentumStablizerOn) {
@@ -249,8 +307,10 @@ export default class Control {
 
   updatePhysicalQuantities() {
     this.rotationMatrix.getNormalMatrix(this.object.matrixWorld).transpose()
+
     this.velocity.set(this.object.body.velocity.x, this.object.body.velocity.y, this.object.body.velocity.z)
     this.localVelocity.copy(this._vec.copy(this.velocity).applyMatrix3(this.rotationMatrix))
+    
     this.angularVelocity.set(this.object.body.angularVelocity.x, this.object.body.angularVelocity.y, this.object.body.angularVelocity.z)
     this.localAngularVelocity.copy(this._vec.copy(this.angularVelocity).applyMatrix3(this.rotationMatrix))
   }

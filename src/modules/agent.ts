@@ -1,8 +1,7 @@
 import { ExtendedObject3D } from "@enable3d/ammo-physics"
 import * as THREE from "three"
-import { agentStateInterface, reactionControlConfig } from "./config"
+import { agentStateInterface } from "./config"
 import Control from "./control"
-import { objToVec3 } from "./utility"
 
 const defaultState: agentStateInterface = {
   type: 'agent',
@@ -14,7 +13,7 @@ const defaultState: agentStateInterface = {
   isAttitudeStablizerOn: true,
   isAttitudeControlOn: true,
   isControlledByPlayer: false,
-  maxVelocity: 40,
+  maxVelocity: 50,
   maxRotationalVelocity: 3
 }
 
@@ -50,26 +49,10 @@ interface maneuverBooleanInterface {
   thrustDown: boolean
 }
 
-const calcEulerEomMatrix = (euler: THREE.Euler) => {
-  const phi = euler.x
-  const theta = euler.y
-  const psy = euler.z
-
-  const eulerEomMatrix = new THREE.Matrix3().set(
-    1, Math.sin(phi) * Math.tan(theta), Math.cos(phi) * Math.tan(theta),
-    0, Math.cos(phi), -Math.sin(phi),
-    0, Math.sin(phi) / Math.cos(theta), Math.cos(phi) )
-
-  return eulerEomMatrix.transpose()
-}
-
 export default class Agent extends ExtendedObject3D {
   mass: number
-  rotationCount: number
 
   control: Control
-
-  updateMethod: Function
 
   attitudeControlTarget: THREE.Quaternion
 
@@ -91,7 +74,6 @@ export default class Agent extends ExtendedObject3D {
     super()
 
     this.mass = 1
-    this.rotationCount = 0
 
     this.state = state
 
@@ -166,7 +148,7 @@ export default class Agent extends ExtendedObject3D {
     this.throttleUp = false
     this.throttleDown = false
 
-    this.updateMethod = this.update.bind(this)
+    this.update = this.update.bind(this)
   }
 
   generateForce(positiveProp: string, negativeProp: string, positiveDirection: THREE.Vector3, negativeDirection: THREE.Vector3, angular = false) {
@@ -213,7 +195,7 @@ export default class Agent extends ExtendedObject3D {
   }
 
   applyThrottleControl(throttleControl: THREE.Vector3): void {
-    if (throttleControl.x > 0) {
+    if (throttleControl.x >= 0) {
       this.maneuverThrottles.acceleration = Math.abs(throttleControl.x)
       this.maneuverThrottles.deceleration = 0
     }
@@ -221,7 +203,7 @@ export default class Agent extends ExtendedObject3D {
       this.maneuverThrottles.deceleration = Math.abs(throttleControl.x)
       this.maneuverThrottles.acceleration = 0
     }
-    if (throttleControl.y > 0) {
+    if (throttleControl.y >= 0) {
       this.maneuverThrottles.thrustUp = Math.abs(throttleControl.y)
       this.maneuverThrottles.thrustDown = 0
     }
@@ -229,7 +211,7 @@ export default class Agent extends ExtendedObject3D {
       this.maneuverThrottles.thrustDown = Math.abs(throttleControl.y)
       this.maneuverThrottles.thrustUp = 0
     }
-    if (throttleControl.z > 0) {
+    if (throttleControl.z >= 0) {
       this.maneuverThrottles.thrustRight = Math.abs(throttleControl.z)
       this.maneuverThrottles.thrustLeft = 0
     }
@@ -240,7 +222,7 @@ export default class Agent extends ExtendedObject3D {
   }
 
   applyRotationalThrottleControl(throttleControl: THREE.Vector3) {
-    if (throttleControl.x > 0) {
+    if (throttleControl.x >= 0) {
       this.maneuverThrottles.rollRight = Math.abs(throttleControl.x)
       this.maneuverThrottles.rollLeft = 0
     }
@@ -248,7 +230,7 @@ export default class Agent extends ExtendedObject3D {
       this.maneuverThrottles.rollLeft = Math.abs(throttleControl.x)
       this.maneuverThrottles.rollRight = 0
     }
-    if (throttleControl.y > 0) {
+    if (throttleControl.y >= 0) {
       this.maneuverThrottles.yawLeft = Math.abs(throttleControl.y)
       this.maneuverThrottles.yawRight = 0
     }
@@ -256,7 +238,7 @@ export default class Agent extends ExtendedObject3D {
       this.maneuverThrottles.yawRight = Math.abs(throttleControl.y)
       this.maneuverThrottles.yawLeft = 0
     }
-    if (throttleControl.z > 0) {
+    if (throttleControl.z >= 0) {
       this.maneuverThrottles.pitchUp = Math.abs(throttleControl.z)
       this.maneuverThrottles.pitchDown = 0
     }

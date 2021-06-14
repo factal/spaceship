@@ -1,8 +1,5 @@
 import Agent from "./agent"
-import './config'
 import { agentStateInterface, keybinds, maneuvers } from "./config"
-
-
 
 const defaultState: agentStateInterface = {
   type: 'agent',
@@ -14,7 +11,7 @@ const defaultState: agentStateInterface = {
   isAttitudeStablizerOn: true,
   isAttitudeControlOn: false,
   isControlledByPlayer: true,
-  maxVelocity: 1000,
+  maxVelocity: 80,
   maxRotationalVelocity: 8
 }
 

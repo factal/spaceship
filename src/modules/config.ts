@@ -30,7 +30,8 @@ export const keybinds: keybindsInterface = {
     attitudeControl: 'x'
   },
   weapons: {
-    main: 'b'
+    main: 'b',
+    sub: 'n'
   },
 }
 
