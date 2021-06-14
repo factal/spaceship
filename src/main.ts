@@ -230,4 +230,4 @@ const sceneConfig = {
 	scenes: [MainScene], 
 	antialias: true,
 }
-PhysicsLoader('./src/ammo', () => new Project(sceneConfig))
+PhysicsLoader('./', () => new Project(sceneConfig))
