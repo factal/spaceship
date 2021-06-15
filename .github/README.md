@@ -1,6 +1,7 @@
 # spaceship
 
 nice boat. demo: [https://factal.github.io/spaceship/](https://factal.github.io/spaceship/) (GitHub Pages の仕様上ディレクトリを読むことができないっぽいのでテクスチャ関係が欠落しています。誰か助けて)
+wasmの関係上index.htmlを直接開いてもエラーが出るっぽいので、ローカル環境で試す場合はhttpサーバーを立ち上げてください。
 
 # lib
 - [webpack](https://webpack.js.org/)
