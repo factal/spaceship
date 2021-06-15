@@ -25,6 +25,7 @@
     "@types/react": "^17.0.8",
     "@types/react-dom": "^17.0.5",
     "enable3d": "^0.22.0",
+    "file-loader": "^6.2.0",
     "jquery": "^3.6.0",
     "matter-js": "^0.17.1",
     "node-pre-gyp": "^0.17.0",

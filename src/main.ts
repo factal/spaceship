@@ -18,6 +18,10 @@ import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader'
 
 import * as config from './modules/config'
 
+import playerModel from '../assets/boat.glb'
+import laser_shot_1 from '../assets/audio/laser_shot_1.wav'
+import laser_shot_2 from '../assets/audio/laser_shot_2.wav'
+
 const vecdisplay = <HTMLInputElement>document.getElementById('vec')
 
 // main logic
@@ -63,12 +67,12 @@ class MainScene extends ExtendedScene3D {
 	}
 
 	async preload() {
-		this.load.preload('playerModel', '/assets/boat.glb')
-		this.load.preload('laser_shot_1', '/assets/audio/laser_shot_1.wav')
-		this.load.preload('laser_shot_2', '/assets/audio/laser_shot_2.wav')
+		this.load.preload('playerModel', playerModel)
+		this.load.preload('laser_shot_1', laser_shot_1)
+		this.load.preload('laser_shot_2', laser_shot_2)
 
-		await this.audioHandler.loadSound('/assets/audio/laser_shot_1.wav', 'laser_shot_1')
-		await this.audioHandler.loadSound('/assets/audio/laser_shot_2.wav', 'laser_shot_2')
+		await this.audioHandler.loadSound(laser_shot_1, 'laser_shot_1')
+		await this.audioHandler.loadSound(laser_shot_2, 'laser_shot_2')
 		await this.modelHandler.load.gltf('playerModel')
 	}
 
@@ -230,4 +234,4 @@ const sceneConfig = {
 	scenes: [MainScene], 
 	antialias: true,
 }
-PhysicsLoader('.', () => new Project(sceneConfig))
+PhysicsLoader('./', () => new Project(sceneConfig))

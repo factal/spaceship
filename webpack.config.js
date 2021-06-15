@@ -10,6 +10,10 @@ module.exports = {
         {
           test: /\.tsx?$/,
           use: "ts-loader"
+        },
+        {
+          test:/\.(png|jpg|gltf|glb|wav|ogg)$/,
+          type: 'asset/resource',
         }
       ]
     },
